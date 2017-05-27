@@ -1,6 +1,6 @@
 # apprenda_exporter
 
-A prometheus exporter for the Apprenda Cloud Platform (see [sample output](sample_output.md))
+A [prometheus exporter](https://prometheus.io/docs/instrumenting/exporters/) for the Apprenda Cloud Platform (see [sample output](sample_output.md))
 
 Required environment variables:
 
