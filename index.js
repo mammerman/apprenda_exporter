@@ -176,6 +176,8 @@ function getNodeData(callback)
                 // node role metrics
                 for(var i=0;i<node.nodeRoles.length;i++){
                     var role = node.nodeRoles[i];
+                    
+                    // windows and linux nodes
                     if((role.nodeRole == "Windows") || (role.nodeRole == "Linux"))
                     {
 
@@ -198,8 +200,27 @@ function getNodeData(callback)
                         node_cpu_allocation_gauge.set({node: node.name},
                             role.allocatedCpu
                         );                     
-
                     }
+
+                    // kubernetes clusters
+                    if(role.nodeRole == "KubernetesLinux")
+                    {
+                        // memory allocation
+                        node_memory_allocation_gauge.set({node: node.name},
+                            role.allocatedMemory
+                        );
+
+                        // memory total
+                        node_memory_total_gauge.set({node: node.name},
+                            role.totalMemory
+                        ); 
+
+                        // cpu allocation
+                        node_cpu_allocation_gauge.set({node: node.name},
+                            role.allocatedCpuInFractionOfCore
+                        ); 
+                    }
+
                 }
             }
             callback();          
