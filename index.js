@@ -27,38 +27,71 @@ var node_roles_state_keys = ['Online', 'Offline', 'Removed', 'Down', 'Reserved',
 * METRIC DEFINITIONS
 */
 
-// gauge metric for node state (indexOf node_roles_state_keys)
-var node_state_gauge = new prometheus.Gauge({ 
-    name: 'apprenda_node_current_state', 
-    help: 'The current state of the node as an index of ' + node_roles_state_keys.toString(), 
-    labelNames: ['node', 'role'] });
+var node_state_gauge;
+var node_cpu_allocation_gauge;
+var node_memory_allocation_gauge;
+var node_memory_total_gauge;
+var application_workload_count_total_guage;
+var application_workload_memory_allocation_total_gauge;
 
-// gauge metric for node cpu allocation
-var node_cpu_allocation_gauge = new prometheus.Gauge({ 
-    name: 'apprenda_node_current_cpu_allocation', 
-    help: 'The current allocation of CPU capacity consumed by guest application workloads (in Mhz)',
-    labelNames: ['node'] });
+function createMetrics(callback) {
 
-// gauge metric for node memory allocation
-var node_memory_allocation_gauge = new prometheus.Gauge({ 
-    name: 'apprenda_node_current_memory_allocation', 
-    help: 'The current allocation of memory capacity consumed by guest application workloads (in MB)',
-    labelNames: ['node'] }); 
+    prometheus.register.clear();
 
-// gauge metric for node cpu allocation
-var node_memory_total_gauge = new prometheus.Gauge({ 
-    name: 'apprenda_node_total_usable_memory', 
-    help: 'The total amount of memory that can be allocated to guest application workloads (in MB)',
-    labelNames: ['node'] });   
+    // gauge metric for node state (indexOf node_roles_state_keys)
+    node_state_gauge = new prometheus.Gauge({ 
+        name: 'apprenda_node_current_state', 
+        help: 'The current state of the node as an index of ' + node_roles_state_keys.toString(), 
+        labelNames: ['node', 'role'] });
+
+    // gauge metric for node cpu allocation
+    node_cpu_allocation_gauge = new prometheus.Gauge({ 
+        name: 'apprenda_node_current_cpu_allocation', 
+        help: 'The current allocation of CPU capacity consumed by guest application workloads (in Mhz)',
+        labelNames: ['node'] });
+
+    // gauge metric for node memory allocation
+    node_memory_allocation_gauge = new prometheus.Gauge({ 
+        name: 'apprenda_node_current_memory_allocation', 
+        help: 'The current allocation of memory capacity consumed by guest application workloads (in MB)',
+        labelNames: ['node'] }); 
+
+    // gauge metric for node cpu allocation
+    node_memory_total_gauge = new prometheus.Gauge({ 
+        name: 'apprenda_node_total_usable_memory', 
+        help: 'The total amount of memory that can be allocated to guest application workloads (in MB)',
+        labelNames: ['node'] });
+
+    // guage metric for developer workload count
+    application_workload_count_total_guage = new prometheus.Gauge({
+        name: 'apprenda_developer_workload_count_total',
+        help: 'The total number of workloads currently running for a developer/application combination.',
+        labelNames: ['developerTeamAlias', 'applicationAlias']
+    });
+
+    // gauge metric for developer allocation 
+    application_workload_memory_allocation_total_gauge = new prometheus.Gauge({
+        name: 'apprenda_developer_workload_memory_allocation_total',
+        help: 'The amount of memory allocated via resource policy for a developer/application combination (in MB)',
+        labelNames: ['developerTeamAlias', 'applicationAlias']
+    });
+
+    callback();
+
+}
 
 
 // handle requests to /metrics from prometheus
 app.get('/metrics', (req, res) => {
-    getSession(function(){
-        getNodeData(function(){        
-            res.end(prometheus.register.metrics());
-            endSession()
-        })
+    createMetrics(function() {
+        getSession(function(){
+            getNodeData(function(){
+                getWorkloadData(function(){
+                    res.end(prometheus.register.metrics());
+                    endSession()
+                }); 
+            });
+        });
     });
 });
 
@@ -175,6 +208,56 @@ function getNodeData(callback)
             callback();
         });
 }
+
+function getWorkloadData(callback)
+{
+
+    console.log("Getting workload metadata");
+
+    /* here we want endTimes that don't yet exist so we get CURRENTLY running workloads */
+    var options = {
+        url: 'https://' + acp_root_url + '/soc/api/v1/resourceallocation?startTime=2017-01-01',
+        rejectUnauthorized: false,
+        headers:
+        {
+            "ApprendaSessionToken": session_token
+        }
+    }
+
+    /* Because the Apprenda API for resource allocation doesn't yet support querying for only
+    currently running workloads, we pull back all results and filter them here.  A future version
+    will optimize for this query. */
+
+    request.get(options)
+        .then(function(parsedBody){
+            var allocations = JSON.parse(parsedBody).resourceAllocations;
+            for(var n=0;n<allocations.length;n++) {
+                var workload = allocations[n];
+                if(workload.undeployTime == null)
+                { 
+                    /* increment gauges */
+                    application_workload_count_total_guage.inc({
+                        developerTeamAlias: workload.developerAlias, 
+                        applicationAlias: workload.applicationAlias
+                    });
+
+                    if(workload.policy != null) {
+                        if(workload.policy.memoryLimitInMegabytes != null) {
+                            application_workload_memory_allocation_total_gauge.inc({
+                                developerTeamAlias: workload.developerAlias, 
+                                applicationAlias: workload.applicationAlias},
+                                workload.policy.memoryLimitInMegabytes
+                            );
+                        }
+                    }
+                }
+            }
+            callback();
+        })
+
+}
+
+
 
 // listen for requests
 app.listen(server_listen_port || 3000, () => {
