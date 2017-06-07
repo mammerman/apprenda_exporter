@@ -214,11 +214,6 @@ function getNodeData(callback)
                         node_memory_total_gauge.set({node: node.name},
                             role.totalMemory
                         ); 
-
-                        // cpu allocation
-                        node_cpu_allocation_gauge.set({node: node.name},
-                            role.allocatedCpuInFractionOfCore
-                        ); 
                     }
 
                 }
