@@ -273,8 +273,6 @@ function getWorkloadData(callback)
 
 }
 
-
-
 // listen for requests
 app.listen(server_listen_port || 3000, () => {
     console.log("Listening");
